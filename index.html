@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#008080">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -22,7 +22,7 @@
   --ui:"MS Sans Serif","Segoe UI",Tahoma,Arial,Helvetica,sans-serif;
   color-scheme:light;
 }
-html,body{height:100%}body{box-sizing:border-box}
+html,body{height:100%;overscroll-behavior:none;touch-action:pan-x pan-y}body{box-sizing:border-box}
 body{background:var(--desk);color:var(--ink);font:13px/1.25 var(--ui);
   padding-block:16px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
   display:flex;flex-direction:column;align-items:center;gap:12px;overflow-x:hidden}
@@ -58,10 +58,10 @@ canvas{display:block;image-rendering:pixelated;touch-action:manipulation;cursor:
 .btn.def{outline:2px solid var(--dark);outline-offset:-1px}
 .btn:focus-visible{outline:1px dotted var(--dark);outline-offset:-4px}
 .field{all:unset;display:block;box-sizing:border-box;width:100%;background:var(--paper);border:1px solid var(--shade);border-right-color:var(--hi);border-bottom-color:var(--hi);box-shadow:inset 1px 1px 0 var(--dark);padding:2px 4px;margin-top:8px}
-.hs{display:grid;grid-template-columns:2ch 1fr auto auto;column-gap:10px;row-gap:1px;background:var(--paper);border:1px solid var(--shade);padding:6px 8px;margin-top:2px;font-variant-numeric:tabular-nums;min-width:min(430px,78vw)}
+.hs{display:grid;grid-template-columns:2ch minmax(70px,1fr) auto auto auto;column-gap:8px;row-gap:1px;background:var(--paper);border:1px solid var(--shade);padding:6px 8px;margin-top:2px;font-variant-numeric:tabular-nums;min-width:min(500px,84vw)}
 .hs .num{text-align:right}
 .hs .hd{grid-column:1/-1;text-align:center;font-weight:700;padding-bottom:2px}
-.hs .c3,.hs .c4{text-align:right;white-space:nowrap}
+.hs .c3,.hs .c4,.hs .c5{text-align:right;white-space:nowrap}
 .tabs{width:min(520px,78vw)}
 .tabbar{display:flex;gap:2px;padding-left:6px;margin-bottom:-1px;position:relative;z-index:1}
 .tabbar button{all:unset;padding:3px 14px;background:var(--face);border:1px solid var(--dark);border-bottom:0;box-shadow:inset 1px 1px 0 var(--hi);cursor:default;position:relative;top:2px}
@@ -108,10 +108,26 @@ const store={
   set(k,v){try{localStorage.setItem("memoryblocks."+k,JSON.stringify(v))}catch(e){}}
 };
 const emptyHS=()=>({big:{A:[],B:[]},small:{A:[],B:[]}});
+const loadedHS=store.get("hs",emptyHS());
+for(const size of ["small","big"])for(const cat of ["A","B"]){
+  if(!loadedHS[size])loadedHS[size]={A:[],B:[]};
+  if(!Array.isArray(loadedHS[size][cat]))loadedHS[size][cat]=[];
+  loadedHS[size][cat]=loadedHS[size][cat].map(e=>{
+    if(!e||typeof e!=="object")return e;
+    // Previous releases stored whole seconds and did not store a completion date.
+    const upgraded={...e};
+    if(!Number.isInteger(upgraded.ms)){
+      upgraded.ms=Math.max(0,Math.round(Number(upgraded.t)||0))*1000;
+    }
+    if(!upgraded.date)upgraded.date=null;
+    return upgraded;
+  });
+}
 const S={
   board:store.get("board","small"), players:store.get("players",1), color:store.get("color",true),
-  hs:store.get("hs",emptyHS()), lastName:(n=>n==="Unbekannt"?TEXT.name.def:n)(store.get("name",TEXT.name.def))
+  hs:loadedHS, lastName:(n=>n==="Unbekannt"?TEXT.name.def:n)(store.get("name",TEXT.name.def))
 };
+store.set("hs",S.hs);
 
 /* ---------- sprites ---------- */
 const sheets={};
@@ -210,7 +226,7 @@ async function onTile(i){
 async function turn(match,id){
   if(S.players===1){
     G.turns++; if(match)G.matches++;
-    if(G.matches===G.pairs){ G.final=Math.floor((performance.now()-G.start)/1000); G.over=true; draw(); await finishSingle(id) }
+    if(G.matches===G.pairs){ G.final=Math.max(0,Math.round(performance.now()-G.start)); G.over=true; draw(); await finishSingle(id) }
   } else {
     if(match)G.score[G.player-1]++; else G.player=G.player===1?2:1;
     G.matches+=match?1:0;
@@ -218,19 +234,32 @@ async function turn(match,id){
   }
   draw();
 }
-const elapsed=()=>G.final!==null?G.final:(G.start===null?0:Math.floor((performance.now()-G.start)/1000));
+const elapsed=()=>G.final!==null?G.final:(G.start===null?0:Math.max(0,Math.round(performance.now()-G.start)));
+function formatTime(ms){
+  ms=Math.max(0,Math.floor(ms));
+  const minutes=Math.floor(ms/60000), seconds=Math.floor(ms/1000)%60, millis=ms%1000;
+  return String(minutes).padStart(2,"0")+":"+String(seconds).padStart(2,"0")+"."+String(millis).padStart(3,"0");
+}
+function completionDate(){
+  const d=new Date();
+  return d.toLocaleDateString("pt-BR")+" "+d.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit",second:"2-digit"});
+}
 
 /* ---------- high scores (0x5b7 / 0x804 / 0x7db) ---------- */
 function slotFor(list,key){ // ties rank below existing entries
-  for(let k=0;k<5;k++){const e=list[k]; if(!e)return k; if(!(e[key[0]]<key[1][0]||(e[key[0]]===key[1][0]&&e[key[2]]<=key[1][1])))return k}
+  for(let k=0;k<5;k++){
+    const e=list[k]; if(!e)return k;
+    const value=e.ms??((Number(e[key[0]])||0)*1000);
+    if(!(value<key[1][0]||(value===key[1][0]&&e[key[2]]<=key[1][1])))return k;
+  }
   return -1;
 }
 async function finishSingle(id){
   const t=G.final,p=G.turns,tb=S.hs[S.board];
-  const sa=slotFor(tb.A,["t",[t,p],"p"]), sb=slotFor(tb.B,["p",[p,t],"t"]);
+  const sa=slotFor(tb.A,["ms",[t,p],"p"]), sb=slotFor(tb.B,["p",[p,t],"ms"]);
   if(sa<0&&sb<0)return;
   const name=await nameDialog(); if(id!==gameId)return;
-  const e={t,p,n:name};
+  const e={t,p,n:name,ms:t,date:completionDate()};
   if(sa>=0){tb.A.splice(sa,0,{...e});tb.A.length=Math.min(5,tb.A.length)}
   if(sb>=0){tb.B.splice(sb,0,{...e});tb.B.length=Math.min(5,tb.B.length)}
   S.lastName=name;store.set("name",name);store.set("hs",S.hs);
@@ -302,9 +331,9 @@ function drawStrip(){
   ctx.fillStyle="#000";ctx.fillRect(0,y,w,1);
   ctx.textBaseline="middle";const ty=y+STRIP/2+1;
   if(S.players===1){
-    const txt=TEXT.strip.zeit+elapsed()+"   "+TEXT.strip.zug+" "+G.turns+"     "+TEXT.strip.paare+" "+G.matches;
+    const txt=TEXT.strip.zeit+formatTime(elapsed())+"   "+TEXT.strip.zug+" "+G.turns+"     "+TEXT.strip.paare+" "+G.matches;
     ctx.font="15px "+fam;
-    let s=txt; if(ctx.measureText(s).width>w-16){s=TEXT.strip.zeit+elapsed()+"   "+G.turns+" / "+G.matches}
+    let s=txt; if(ctx.measureText(s).width>w-16){s=TEXT.strip.zeit+formatTime(elapsed())+"   "+G.turns+" / "+G.matches}
     ctx.fillStyle=fg;ctx.textAlign="right";ctx.fillText(s,w-9,ty);
   } else {
     ctx.font="15px "+fam;
@@ -316,16 +345,14 @@ function drawStrip(){
   }
 }
 function startTick(){clearInterval(tick);tick=setInterval(()=>{ if(!G)return;
-  if(G.over){G.flash++;draw()} else if(S.players===1&&G.start!==null)draw() },500)}
+  if(G.over){G.flash++;draw()} else if(S.players===1&&G.start!==null)draw() },16)}
 cv.addEventListener("pointerdown",e=>{
   const r=cv.getBoundingClientRect();
   const x=(e.clientX-r.left)*(LAY.bw/r.width), y=(e.clientY-r.top)*((LAY.bh+STRIP)/r.height);
   if(y>=LAY.bh)return; e.preventDefault(); handleClick(x,y);
 });
-addEventListener("resize",()=>{
-  const tall=innerHeight>innerWidth*1.15;
-  if(G&&tall!==G.tall&&G.start===null&&G.matches===0&&G.score[0]+G.score[1]===0&&G.first===-1&&!G.busy){newGame();return}
-  layout();draw()});
+// The playfield keeps the dimensions calculated when the game starts.
+addEventListener("resize",()=>{draw()});
 
 /* ---------- menus ---------- */
 const MENU=TEXT.menu;
@@ -447,7 +474,7 @@ function showScores(board){
     for(const [key,head] of [["A",TEXT.hs.zeit],["B",TEXT.hs.paare]]){
       const g=document.createElement("div");g.className="hs";g.innerHTML=`<div class="hd">${head}</div>`;
       for(let k=0;k<5;k++){const e=tb[key][k];
-        g.insertAdjacentHTML("beforeend",`<span class="num">${k+1}.</span><span>${e?esc(e.n):""}</span><span class="c3">${e?e.t+" "+TEXT.hs.sek:""}</span><span class="c4">${e?e.p+" "+TEXT.hs.pg:""}</span>`)}
+        g.insertAdjacentHTML("beforeend",`<span class="num">${k+1}.</span><span>${e?esc(e.n):""}</span><span class="c3">${e?formatTime(e.ms??(e.t||0)*1000):""}</span><span class="c4">${e?e.p+" "+TEXT.hs.pg:""}</span><span class="c5">${e?esc(e.date||"—"):""}</span>`)}
       root.append(g);
     }
   };
