@@ -1,0 +1,23 @@
+Memory Blocks - PWA instalável (pt-BR, uso pessoal)
+===================================================
+Homenagem de fã ao Memory Blocks (Symantec Game Pack, 1991, Charles Timmerman).
+Não é um produto oficial. Não redistribuir.
+
+Arquivos
+  index.html            o jogo (arquivo único, tudo embutido)
+  manifest.webmanifest  nome, ícones e modo "standalone"
+  sw.js                 service worker (funciona offline depois da primeira visita)
+  icons/                ícones 192/512, maskable 512, apple-touch e favicon
+
+Para instalar, o PWA precisa ser servido por HTTPS (ou localhost). Abrir o index.html direto do disco (file://) joga normalmente, mas NÃO instala.
+
+Opção 1 - testar no computador (localhost)
+  cd pasta-do-pwa
+  python3 -m http.server 8080
+  abra http://localhost:8080 no Chrome/Edge e clique no ícone de instalar na barra de endereço.
+
+Opção 2 - usar no celular/outros aparelhos
+  Publique a pasta em qualquer hospedagem estática com HTTPS (GitHub Pages, Netlify, Cloudflare Pages, Vercel...).
+  Android/Chrome: menu > "Instalar app". iPhone/Safari: Compartilhar > "Adicionar à Tela de Início".
+
+Ao atualizar o jogo, troque a versão em sw.js (const CACHE = "memory-blocks-vN") para os aparelhos pegarem a nova.
